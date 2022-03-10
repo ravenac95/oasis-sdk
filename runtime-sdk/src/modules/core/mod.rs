@@ -16,7 +16,7 @@ use crate::{
     dispatcher,
     module::{self, InvariantHandler as _, Module as _, ModuleInfoHandler as _},
     types::{
-        token,
+        in_msg, token,
         transaction::{self, AddressSpec, AuthProof, Call, CallFormat, UnverifiedTransaction},
     },
     Runtime,
@@ -117,6 +117,14 @@ pub enum Error {
     #[error("transaction is too large")]
     #[sdk_error(code = 23)]
     OversizedTransaction,
+
+    #[error("malformed incoming message: {0}")]
+    #[sdk_error(code = 24)]
+    MalformedIncomingMessageData(u64, #[source] anyhow::Error),
+
+    #[error("invalid incoming message: {0}")]
+    #[sdk_error(code = 25)]
+    InvalidIncomingMessage(#[from] in_msg::Error),
 }
 
 /// Events emitted by the core module.
