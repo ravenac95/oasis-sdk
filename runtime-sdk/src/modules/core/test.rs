@@ -195,6 +195,7 @@ impl GasWasterModule {
     }
 }
 
+impl module::IncomingMessageHandler for GasWasterModule {}
 impl module::BlockHandler for GasWasterModule {}
 impl module::TransactionHandler for GasWasterModule {}
 impl module::MigrationHandler for GasWasterModule {
