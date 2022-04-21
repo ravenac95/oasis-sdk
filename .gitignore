@@ -26,6 +26,6 @@ tests/e2e/e2e
 tests/benchmark/benchmark
 cli/cli
 cli/oasis
-client-sdk/go/testing/gen_vectors/gen_vectors
+cli/gen_runtime_vectors/gen_runtime_vectors
 client-sdk/ts-web/core/reflect-go/reflect-go
 tools/orc/orc

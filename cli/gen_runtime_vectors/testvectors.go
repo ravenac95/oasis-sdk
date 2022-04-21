@@ -1,4 +1,4 @@
-package helpers
+package main
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/oasisprotocol/oasis-core/go/common/cbor"
 	"github.com/oasisprotocol/oasis-core/go/common/crypto/hash"
+	"github.com/oasisprotocol/oasis-sdk/cli/wallet"
 	signature "github.com/oasisprotocol/oasis-sdk/client-sdk/go/crypto/signature"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/testing"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/types"
@@ -18,11 +19,16 @@ const (
 
 var chainContext hash.Hash
 
-// TestVector is an Oasis transaction test vector.
-type TestVector struct {
-	Kind            string            `json:"kind"`
-	ChainContext    string            `json:"signature_context"`
-	Tx              interface{}       `json:"tx"`
+// RuntimeTestVector is an Oasis runtime transaction test vector.
+type RuntimeTestVector struct {
+	Kind         string      `json:"kind"`
+	ChainContext string      `json:"signature_context"`
+	Tx           interface{} `json:"tx"`
+	// TxDetails stores other tx-specific information which need
+	// to be checked, but are not part of the signed transaction.
+	// e.g. ethereum address for deposits. User needs to see the ethereum-formatted
+	// address and Ledger needs to check, if it really maps into Tx.Body.To.
+	TxDetails       interface{}       `json:"tx_details"`
 	SignedTx        types.Transaction `json:"signed_tx"`
 	EncodedTx       []byte            `json:"encoded_tx"`
 	EncodedSignedTx []byte            `json:"encoded_signed_tx"`
@@ -30,7 +36,9 @@ type TestVector struct {
 	// NOTE: This means that the transaction passes basic static validation, but
 	// it may still not be valid on the given network due to invalid nonce,
 	// or due to some specific parameters set on the network.
-	Valid            bool                `json:"valid"`
+	Valid bool `json:"valid"`
+	// SignerAlgorithm is AlgorithmEd25519Raw or AlgorithmSecp256k1Raw
+	SignerAlgorithm  string              `json:"signer_algorithm"`
 	SignerPrivateKey []byte              `json:"signer_private_key"`
 	SignerPublicKey  signature.PublicKey `json:"signer_public_key"`
 }
@@ -39,9 +47,13 @@ func init() {
 	chainContext.FromBytes([]byte(chainContextSeed))
 }
 
-// MakeTestVector generates a new test vector from a transaction using a specific signer.
-func MakeTestVector(kind string, tx *types.Transaction, valid bool, w testing.TestKey, nonce uint64, chainContext signature.Context) TestVector {
+// MakeRuntimeTestVector generates a new test vector from a transaction using a specific signer.
+func MakeRuntimeTestVector(kind string, tx *types.Transaction, txDetails interface{}, valid bool, w testing.TestKey, nonce uint64, chainContext signature.Context) RuntimeTestVector {
 	tx.AppendAuthSignature(w.SigSpec, nonce)
+	signerAlgorithm := wallet.AlgorithmEd25519Raw
+	if w.SigSpec.Secp256k1Eth != nil {
+		signerAlgorithm = wallet.AlgorithmSecp256k1Raw
+	}
 
 	// Configure chain context for all signatures using chain domain separation.
 	ts := tx.PrepareForSigning()
@@ -71,15 +83,17 @@ func MakeTestVector(kind string, tx *types.Transaction, valid bool, w testing.Te
 		panic(err)
 	}
 
-	return TestVector{
+	return RuntimeTestVector{
 		Kind:             keySeedPrefix + kind,
 		ChainContext:     string(chainContext),
 		Tx:               prettyTx,
+		TxDetails:        txDetails,
 		SignedTx:         *txSigned,
 		EncodedTx:        cbor.Marshal(tx),
 		EncodedSignedTx:  cbor.Marshal(txSigned),
 		Valid:            valid,
-		SignerPrivateKey: []byte{}, // TODO
+		SignerAlgorithm:  signerAlgorithm,
+		SignerPrivateKey: w.UnsafeBytes,
 		SignerPublicKey:  w.Signer.Public(),
 	}
 }

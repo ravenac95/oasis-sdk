@@ -3,6 +3,7 @@ package testing
 import (
 	"crypto/sha512"
 
+	ed25519voi "github.com/oasisprotocol/curve25519-voi/primitives/ed25519"
 	"golang.org/x/crypto/sha3"
 
 	memorySigner "github.com/oasisprotocol/oasis-core/go/common/crypto/signature/signers/memory"
@@ -21,15 +22,20 @@ type TestKey struct {
 
 	// EthAddress is the corresponding Ethereum address if the key is secp256k1.
 	EthAddress [20]byte
+
+	// UnsafeBytes stores the Signer's private keye.
+	UnsafeBytes []byte
 }
 
 func newEd25519TestKey(seed string) TestKey {
 	signer := ed25519.WrapSigner(memorySigner.NewTestSigner(seed))
 	sigspec := types.NewSignatureAddressSpecEd25519(signer.Public().(ed25519.PublicKey))
+	s := sha512.Sum512_256([]byte(seed))
 	return TestKey{
-		Signer:  signer,
-		Address: types.NewAddress(sigspec),
-		SigSpec: sigspec,
+		Signer:      signer,
+		Address:     types.NewAddress(sigspec),
+		SigSpec:     sigspec,
+		UnsafeBytes: ed25519voi.NewKeyFromSeed(s[:]),
 	}
 }
 
@@ -45,10 +51,11 @@ func newSecp256k1TestKey(seed string) TestKey {
 	copy(ethAddress[:], h.Sum(nil)[32-20:])
 
 	return TestKey{
-		Signer:     signer,
-		Address:    types.NewAddress(sigspec),
-		SigSpec:    sigspec,
-		EthAddress: ethAddress,
+		Signer:      signer,
+		Address:     types.NewAddress(sigspec),
+		SigSpec:     sigspec,
+		EthAddress:  ethAddress,
+		UnsafeBytes: pk[:],
 	}
 }
 
