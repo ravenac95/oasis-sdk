@@ -49,7 +49,7 @@ func main() {
 							depositWithdrawDst, _ := helpers.ResolveAddress(nil, addr)
 							tx = consensusaccounts.NewDepositTx(fee, &consensusaccounts.Deposit{
 								To:     depositWithdrawDst,
-								Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), ""),
+								Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
 							})
 							txDetails := map[string]string{
 								"orig_to": addr,
@@ -58,7 +58,7 @@ func main() {
 
 							tx = consensusaccounts.NewWithdrawTx(fee, &consensusaccounts.Withdraw{
 								To:     depositWithdrawDst,
-								Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), ""),
+								Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
 							})
 							vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, map[string]string{}, true, w, nonce, chainContext))
 
