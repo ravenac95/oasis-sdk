@@ -362,7 +362,7 @@ impl<R: Runtime> Dispatcher<R> {
         R::Modules::execute_in_msg(ctx, in_msg, data, tx)?;
         if let Some(tx) = tx {
             let tx_size = match data
-                .ut
+                .tx
                 .as_ref()
                 .unwrap_or_else(|| panic!("incoming message {} has tx but no ut", in_msg.id))
                 .len()
@@ -561,7 +561,7 @@ impl<R: Runtime + Send + Sync> transaction::dispatcher::Dispatcher for Dispatche
                         warn!(ctx.get_logger("dispatcher"), "incoming message data malformed"; "id" => in_msg.id, "err" => ?err);
                         IncomingMessageData::noop()
                     });
-                    let tx = data.ut.as_ref().and_then(|ut| Self::decode_tx(ctx, ut).map_err(|err| {
+                    let tx = data.tx.as_ref().and_then(|tx| Self::decode_tx(ctx, tx).map_err(|err| {
                         warn!(ctx.get_logger("dispatcher"), "incoming message transaction malformed"; "id" => in_msg.id, "err" => ?err);
                     }).ok());
                     if prefetch_enabled {
@@ -629,9 +629,9 @@ impl<R: Runtime + Send + Sync> transaction::dispatcher::Dispatcher for Dispatche
                         warn!(ctx.get_logger("dispatcher"), "incoming message data malformed"; "id" => in_msg.id, "err" => ?err);
                         IncomingMessageData::noop()
                     });
-                    let tx = match data.ut.as_ref() {
-                        Some(ut) => {
-                            match Self::decode_tx(ctx, ut) {
+                    let tx = match data.tx.as_ref() {
+                        Some(tx) => {
+                            match Self::decode_tx(ctx, tx) {
                                 Ok(tx) => {
                                     let remaining_gas = R::Core::remaining_in_msgs_gas(ctx);
                                     if remaining_gas < cfg.min_remaining_gas {

@@ -17,16 +17,16 @@ pub enum Error {
 pub struct IncomingMessageData {
     #[cbor(rename = "v")]
     pub version: u16,
-    /// An embedded transaction (UnverifiedTransaction).
+    /// An embedded transaction (UnverifiedTransaction in runtimes using this SDK).
     /// The transaction doesn't need to be from the same account that sent the message.
-    pub ut: Option<Vec<u8>>,
+    pub tx: Option<Vec<u8>>,
 }
 
 impl IncomingMessageData {
     pub fn noop() -> Self {
         Self {
             version: LATEST_INCOMING_MESSAGE_VERSION,
-            ut: None,
+            tx: None,
         }
     }
 
