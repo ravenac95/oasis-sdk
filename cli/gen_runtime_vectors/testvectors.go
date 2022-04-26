@@ -1,17 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
+	"github.com/oasisprotocol/oasis-core/go/common"
 	"github.com/oasisprotocol/oasis-core/go/common/cbor"
 	"github.com/oasisprotocol/oasis-core/go/common/crypto/hash"
-	"github.com/oasisprotocol/oasis-core/go/common/quantity"
-	"github.com/oasisprotocol/oasis-sdk/cli/cmd/common"
 	"github.com/oasisprotocol/oasis-sdk/cli/wallet"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/config"
 	signature "github.com/oasisprotocol/oasis-sdk/client-sdk/go/crypto/signature"
-	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/helpers"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/modules/consensusaccounts"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/testing"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/types"
@@ -27,7 +24,9 @@ var chainContext hash.Hash
 // RuntimeTestVector is an Oasis runtime transaction test vector.
 type RuntimeTestVector struct {
 	Kind         string            `json:"kind"`
-	ChainContext string            `json:"chain_context"/`
+	ChainContext string            `json:"chain_context"`
+	RuntimeId    common.Namespace  `json:"runtime_id"`
+	SigCtx       string            `json:"signature_ctx"`
 	Tx           types.Transaction `json:"tx"`
 	TxBody       interface{}       `json:"tx_body"`
 	// TxDetails stores other tx-specific information which need
@@ -54,34 +53,32 @@ func init() {
 }
 
 // MakeRuntimeTestVector generates a new test vector from a transaction using a specific signer.
-func MakeRuntimeTestVector(kind string, tx *types.Transaction, txDetails interface{}, valid bool, w testing.TestKey, nonce uint64, chainContext signature.Context) RuntimeTestVector {
+func MakeRuntimeTestVector(kind string, tx *types.Transaction, txDetails interface{}, valid bool, w testing.TestKey, nonce uint64, rtId common.Namespace, chainContext signature.Context) RuntimeTestVector {
 	signerAlgorithm := wallet.AlgorithmEd25519Raw
 	if w.SigSpec.Secp256k1Eth != nil {
 		signerAlgorithm = wallet.AlgorithmSecp256k1Raw
 	}
 
-	gasLimit := uint64(100000)
-	gasPrice := uint64(100001)
+	// Prepare the transaction before (optional) gas estimation to ensure correct estimation.
+	tx.AppendAuthSignature(w.SigSpec, nonce)
 
-	npw := common.NPWSelection{
-		NetworkName: "mainnet",
-		Network: &config.Network{
-			ChainContext: string(chainContext),
-		},
-		ParaTimeName: "emerald",
-		ParaTime: &config.ParaTime{
-			Description: "emerald",
-			ID:          "000000000000000000000000000000000000000000000000e2eaa99fc008f87f",
-			Denominations: map[string]*config.DenominationInfo{
-				"ROSE": {
-					Symbol:   "ROSE",
-					Decimals: 18,
-				},
-			},
-		},
+	// TODO: Support confidential transactions (only in online mode).
+
+	// Sign the transaction.
+	rtIdHex, err := rtId.MarshalHex()
+	if err != nil {
+		log.Fatalf("error marshalling runtime id: %v", err)
+	}
+	pt := &config.ParaTime{
+		ID: string(rtIdHex),
+	}
+	sigCtx := signature.DeriveChainContext(pt.Namespace(), string(chainContext))
+	ts := tx.PrepareForSigning()
+	if err := ts.AppendSign(sigCtx, w.Signer); err != nil {
+		log.Fatalf("failed to sign transaction: %w", err)
 	}
 
-	sigTx := SignParaTimeTransaction(&npw, w, tx, nonce, gasLimit, gasPrice)
+	sigTx := ts.UnverifiedTransaction()
 
 	// TODO: Use introspecion to figure out which
 	//txBody := reflect.New(reflect.TypeOf(tx.Call.Body)).Interface()
@@ -92,6 +89,8 @@ func MakeRuntimeTestVector(kind string, tx *types.Transaction, txDetails interfa
 	return RuntimeTestVector{
 		Kind:             keySeedPrefix + kind,
 		ChainContext:     string(chainContext),
+		RuntimeId:        rtId,
+		SigCtx:           string(sigCtx),
 		Tx:               *tx,
 		TxBody:           txBody,
 		TxDetails:        txDetails,
@@ -103,46 +102,4 @@ func MakeRuntimeTestVector(kind string, tx *types.Transaction, txDetails interfa
 		SignerPrivateKey: w.UnsafeBytes,
 		SignerPublicKey:  w.Signer.Public(),
 	}
-}
-
-// SignParaTimeTransaction signs a ParaTime transaction.
-func SignParaTimeTransaction(
-	npw *common.NPWSelection,
-	w testing.TestKey,
-	tx *types.Transaction,
-	nonce uint64,
-	txGasLimit uint64,
-	txGasPrice uint64,
-) *types.UnverifiedTransaction {
-	// Default to passed values and do online estimation when possible.
-	tx.AuthInfo.Fee.Gas = txGasLimit
-
-	gasPrice := &types.BaseUnits{}
-	// TODO: Support different denominations for gas fees.
-	var err error
-	gasPrice, err = helpers.ParseParaTimeDenomination(npw.ParaTime, fmt.Sprintf("%d", txGasPrice), types.NativeDenomination)
-	if err != nil {
-		log.Fatalf("bad gas price: %w", err)
-	}
-
-	// Prepare the transaction before (optional) gas estimation to ensure correct estimation.
-	tx.AppendAuthSignature(w.SigSpec, nonce)
-
-	// Compute fee amount based on gas price.
-	if err := gasPrice.Amount.Mul(quantity.NewFromUint64(tx.AuthInfo.Fee.Gas)); err != nil {
-		log.Fatalf("error computing gasPrice: %w", err)
-	}
-	tx.AuthInfo.Fee.Amount.Amount = gasPrice.Amount
-	tx.AuthInfo.Fee.Amount.Denomination = gasPrice.Denomination
-
-	// TODO: Support confidential transactions (only in online mode).
-
-	// Sign the transaction.
-	sigCtx := signature.DeriveChainContext(npw.ParaTime.Namespace(), npw.Network.ChainContext)
-	ts := tx.PrepareForSigning()
-	if err := ts.AppendSign(sigCtx, w.Signer); err != nil {
-		log.Fatalf("failed to sign transaction: %w", err)
-	}
-
-	return ts.UnverifiedTransaction()
 }

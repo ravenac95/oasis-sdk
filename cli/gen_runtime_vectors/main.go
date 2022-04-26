@@ -22,6 +22,7 @@ var (
 		"oasis1qpupfu7e2n6pkezeaw0yhj8mcem8anj64ytrayne", // Dave
 		"oasis1qrec770vrek0a9a5lcrv0zvt22504k68svq7kzve", // Alice
 	}
+	runtimeId = "000000000000000000000000000000000000000000000000e2eaa99fc008f87f"
 )
 
 func main() {
@@ -30,15 +31,14 @@ func main() {
 	// Generate different gas fees.
 	for _, fee := range []*types.Fee{
 		{},
-		{Amount: types.NewBaseUnits(*quantity.NewFromUint64(10_000_000_000), "_"), Gas: 1000},
 		{Amount: types.NewBaseUnits(*quantity.NewFromUint64(0), "_"), Gas: 2000},
 		{Amount: types.NewBaseUnits(*quantity.NewFromUint64(424_242_424_242), "ROSE"), Gas: 3000},
 		{Amount: types.NewBaseUnits(*quantity.NewFromUint64(123_456_789), "TEST"), Gas: 4000},
 	} {
 		// Generate different nonces.
-		for _, nonce := range []uint64{0, 1, 10, 42, 1000, 1_000_000, 10_000_000, math.MaxUint64} {
+		for _, nonce := range []uint64{0, 1, 42, math.MaxUint64} {
 			// Prepare transaction.
-			for _, amt := range []uint64{0, 1000, 10_000_000, 10_000_000_000_000, 10_000_000_000_000_000_000} {
+			for _, amt := range []uint64{0, 1000, 10_000_000_000_000_000_000} {
 				for _, w := range []testing.TestKey{testing.Alice, testing.Dave} {
 					for _, addr := range toAddresses {
 						for _, chainContext := range []signature.Context{
@@ -54,13 +54,13 @@ func main() {
 							txDetails := map[string]string{
 								"orig_to": addr,
 							}
-							vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txDetails, true, w, nonce, chainContext))
+							vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txDetails, true, w, nonce, runtimeId, chainContext))
 
 							tx = consensusaccounts.NewWithdrawTx(fee, &consensusaccounts.Withdraw{
 								To:     depositWithdrawDst,
 								Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
 							})
-							vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, map[string]string{}, true, w, nonce, chainContext))
+							vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, map[string]string{}, true, w, nonce, runtimeId, chainContext))
 
 						}
 					}
