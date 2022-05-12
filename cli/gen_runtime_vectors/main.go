@@ -40,7 +40,6 @@ func main() {
 
 	var tx *types.Transaction
 	var meta map[string]string
-	var txBody interface{}
 
 	for _, fee := range []*types.Fee{
 		{},
@@ -55,164 +54,75 @@ func main() {
 					signature.Context(config.DefaultNetworks.All["testnet"].ChainContext),
 				} {
 					sigCtx := signature.DeriveChainContext(rtId, string(chainContext))
-					var dst *types.Address
 
-					// Valid Deposit: Alice -> Alice account on ParaTime
-					txBody = &consensusaccounts.Deposit{
-						To:     nil,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
+					for _, t := range []struct {
+						to           string
+						origTo       string
+						rtId         string
+						chainContext string
+						valid        bool
+					}{
+						// Valid Deposit: Alice -> Alice account on ParaTime
+						{"", "", rtIdHex, string(chainContext), true},
+						// Valid Deposit: Alice -> Dave's native account on ParaTime
+						{daveNativeAddr, "", rtIdHex, string(chainContext), true},
+						// Valid Deposit: Alice -> Dave's ethereum account on ParaTime
+						{daveEthAddr, daveEthAddr, rtIdHex, string(chainContext), true},
+						// Invalid Deposit: orig_to doesn't match transaction's to
+						{daveEthAddr, unknownEthAddr, rtIdHex, string(chainContext), false},
+						// Invalid Deposit: runtime_id doesn't match the one in sigCtx
+						{daveEthAddr, daveEthAddr, unknownRtIdHex, string(chainContext), false},
+						// Invalid Deposit: chain_context doesn't match the one in sigCtx
+						{daveEthAddr, daveEthAddr, rtIdHex, unknownChainContext, false},
+					} {
+						to, _ := helpers.ResolveAddress(nil, t.to)
+						txBody := &consensusaccounts.Deposit{
+							To:     to,
+							Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
+						}
+						tx = consensusaccounts.NewDepositTx(fee, txBody)
+						meta = map[string]string{
+							"runtime_id":    t.rtId,
+							"chain_context": t.chainContext,
+						}
+						if t.origTo != "" {
+							meta["orig_to"] = t.origTo
+						}
+						vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, t.valid, testing.Alice, nonce, sigCtx))
 					}
-					tx = consensusaccounts.NewDepositTx(fee, txBody.(*consensusaccounts.Deposit))
-					meta = map[string]string{
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, true, testing.Alice, nonce, sigCtx))
 
-					// Valid Deposit: Alice -> Dave's native account on ParaTime
-					dst, _ = helpers.ResolveAddress(nil, daveNativeAddr)
-					txBody = &consensusaccounts.Deposit{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
+					for _, t := range []struct {
+						to           string
+						signer       testing.TestKey
+						rtId         string
+						chainContext string
+						valid        bool
+					}{
+						// Valid Withdraw: Alice -> Alice account on consensus
+						{"", testing.Alice, rtIdHex, string(chainContext), true},
+						// Valid Withdraw: Alice -> Dave account on consensus
+						{daveNativeAddr, testing.Alice, rtIdHex, string(chainContext), true},
+						// Valid Withdraw: Dave secp256k1 account -> Dave address on consensus
+						{"", testing.Dave, rtIdHex, string(chainContext), true},
+						// Valid Withdraw: Dave secp256k1 account -> Alice account on consensus
+						{aliceNativeAddr, testing.Dave, rtIdHex, string(chainContext), true},
+						// Invalid Withdraw: runtime_id doesn't match the one in sigCtx
+						{aliceNativeAddr, testing.Dave, unknownRtIdHex, string(chainContext), false},
+						// Invalid Withdraw: chain_context doesn't match the one in sigCtx
+						{aliceNativeAddr, testing.Dave, rtIdHex, unknownChainContext, false},
+					} {
+						to, _ := helpers.ResolveAddress(nil, t.to)
+						txBody := &consensusaccounts.Withdraw{
+							To:     to,
+							Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
+						}
+						tx = consensusaccounts.NewWithdrawTx(fee, txBody)
+						meta = map[string]string{
+							"runtime_id":    t.rtId,
+							"chain_context": t.chainContext,
+						}
+						vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, t.valid, t.signer, nonce, sigCtx))
 					}
-					tx = consensusaccounts.NewDepositTx(fee, txBody.(*consensusaccounts.Deposit))
-					meta = map[string]string{
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, true, testing.Alice, nonce, sigCtx))
-
-					// Valid Deposit: Alice -> Dave's ethereum account on ParaTime
-					dst, _ = helpers.ResolveAddress(nil, daveEthAddr)
-					txBody = &consensusaccounts.Deposit{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewDepositTx(fee, txBody.(*consensusaccounts.Deposit))
-					meta = map[string]string{
-						"orig_to":       daveEthAddr,
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, true, testing.Alice, nonce, sigCtx))
-
-					// Invalid Deposit: orig_to doesn't match transaction's to
-					dst, _ = helpers.ResolveAddress(nil, daveEthAddr)
-					txBody = &consensusaccounts.Deposit{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewDepositTx(fee, txBody.(*consensusaccounts.Deposit))
-					meta = map[string]string{
-						"orig_to":       unknownEthAddr,
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, false, testing.Alice, nonce, sigCtx))
-
-					// Invalid Deposit: runtime_id doesn't match the one in sigCtx
-					dst, _ = helpers.ResolveAddress(nil, daveEthAddr)
-					txBody = &consensusaccounts.Deposit{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewDepositTx(fee, txBody.(*consensusaccounts.Deposit))
-					meta = map[string]string{
-						"orig_to":       daveEthAddr,
-						"runtime_id":    unknownRtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, false, testing.Alice, nonce, sigCtx))
-
-					// Invalid Deposit: chain_context doesn't match the one in sigCtx
-					dst, _ = helpers.ResolveAddress(nil, daveEthAddr)
-					txBody = &consensusaccounts.Deposit{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewDepositTx(fee, txBody.(*consensusaccounts.Deposit))
-					meta = map[string]string{
-						"orig_to":       daveEthAddr,
-						"runtime_id":    rtIdHex,
-						"chain_context": unknownChainContext,
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, false, testing.Alice, nonce, sigCtx))
-
-					// Valid Withdraw: Alice -> Alice account on consensus
-					txBody = &consensusaccounts.Withdraw{
-						To:     nil,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewWithdrawTx(fee, txBody.(*consensusaccounts.Withdraw))
-					meta = map[string]string{
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, true, testing.Alice, nonce, sigCtx))
-
-					// Valid Withdraw: Alice -> Dave account on consensus
-					dst, _ = helpers.ResolveAddress(nil, daveNativeAddr)
-					txBody = &consensusaccounts.Withdraw{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewWithdrawTx(fee, txBody.(*consensusaccounts.Withdraw))
-					meta = map[string]string{
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, true, testing.Alice, nonce, sigCtx))
-
-					// Valid Withdraw: Dave secp256k1 account -> Dave address on consensus
-					txBody = &consensusaccounts.Withdraw{
-						To:     nil,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewWithdrawTx(fee, txBody.(*consensusaccounts.Withdraw))
-					meta = map[string]string{
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, true, testing.Dave, nonce, sigCtx))
-
-					// Valid Withdraw: Dave secp256k1 account -> Alice account on consensus
-					dst, _ = helpers.ResolveAddress(nil, aliceNativeAddr)
-					txBody = &consensusaccounts.Withdraw{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewWithdrawTx(fee, txBody.(*consensusaccounts.Withdraw))
-					meta = map[string]string{
-						"runtime_id":    rtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, true, testing.Dave, nonce, sigCtx))
-
-					// Invalid Withdraw: runtime_id doesn't match the one in sigCtx
-					dst, _ = helpers.ResolveAddress(nil, aliceNativeAddr)
-					txBody = &consensusaccounts.Withdraw{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewWithdrawTx(fee, txBody.(*consensusaccounts.Withdraw))
-					meta = map[string]string{
-						"runtime_id":    unknownRtIdHex,
-						"chain_context": string(chainContext),
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, false, testing.Dave, nonce, sigCtx))
-
-					// Invalid Withdraw: chain_context doesn't match the one in sigCtx
-					dst, _ = helpers.ResolveAddress(nil, aliceNativeAddr)
-					txBody = &consensusaccounts.Withdraw{
-						To:     dst,
-						Amount: types.NewBaseUnits(*quantity.NewFromUint64(amt), "ROSE"),
-					}
-					tx = consensusaccounts.NewWithdrawTx(fee, txBody.(*consensusaccounts.Withdraw))
-					meta = map[string]string{
-						"runtime_id":    rtIdHex,
-						"chain_context": unknownChainContext,
-					}
-					vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, false, testing.Dave, nonce, sigCtx))
 				}
 			}
 		}
