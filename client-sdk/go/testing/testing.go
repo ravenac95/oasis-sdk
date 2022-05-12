@@ -68,4 +68,6 @@ var (
 	Charlie = newEd25519TestKey("oasis-runtime-sdk/test-keys: charlie")
 	// Dave is the test key D.
 	Dave = newSecp256k1TestKey("oasis-runtime-sdk/test-keys: dave")
+	// Eve is the test key E.
+	Eve = newSecp256k1TestKey("oasis-runtime-sdk/test-keys: eve")
 )
