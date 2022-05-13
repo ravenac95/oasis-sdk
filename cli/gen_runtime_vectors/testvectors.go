@@ -45,7 +45,7 @@ func init() {
 }
 
 // MakeRuntimeTestVector generates a new test vector from a transaction using a specific signer.
-func MakeRuntimeTestVector(kind string, tx *types.Transaction, txBody interface{}, meta interface{}, valid bool, w testing.TestKey, nonce uint64, sigCtx signature.Context) RuntimeTestVector {
+func MakeRuntimeTestVector(tx *types.Transaction, txBody interface{}, meta interface{}, valid bool, w testing.TestKey, nonce uint64, sigCtx signature.Context) RuntimeTestVector {
 	tx.AppendAuthSignature(w.SigSpec, nonce)
 
 	// Sign the transaction.
@@ -61,7 +61,7 @@ func MakeRuntimeTestVector(kind string, tx *types.Transaction, txBody interface{
 	}
 
 	return RuntimeTestVector{
-		Kind:             keySeedPrefix + kind,
+		Kind:             keySeedPrefix + tx.Call.Method,
 		SigCtx:           string(sigCtx.New(types.SignatureContextBase)),
 		Tx:               prettyTx,
 		Meta:             meta,

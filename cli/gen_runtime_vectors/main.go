@@ -15,6 +15,8 @@ import (
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/helpers"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/modules/accounts"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/modules/consensusaccounts"
+	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/modules/contracts"
+	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/modules/evm"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/testing"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/types"
 )
@@ -52,13 +54,13 @@ func main() {
 		{Amount: types.NewBaseUnits(*quantity.NewFromUint64(123_456_789), "TEST"), Gas: 4000},
 	} {
 		for _, nonce := range []uint64{0, 1, math.MaxUint64} {
-			for _, amt := range []uint64{0, 1000, 10_000_000_000_000_000_000} {
-				for _, chainContext := range []signature.Context{
-					signature.Context(config.DefaultNetworks.All["mainnet"].ChainContext),
-					signature.Context(config.DefaultNetworks.All["testnet"].ChainContext),
-				} {
-					sigCtx := signature.DeriveChainContext(rtId, string(chainContext))
+			for _, chainContext := range []signature.Context{
+				signature.Context(config.DefaultNetworks.All["mainnet"].ChainContext),
+				signature.Context(config.DefaultNetworks.All["testnet"].ChainContext),
+			} {
+				sigCtx := signature.DeriveChainContext(rtId, string(chainContext))
 
+				for _, amt := range []uint64{0, 1000, 10_000_000_000_000_000_000} {
 					// consensusaccounts.Deposit
 					for _, t := range []struct {
 						to           string
@@ -101,7 +103,7 @@ func main() {
 						if t.origTo != "" {
 							meta["orig_to"] = t.origTo
 						}
-						vectors = append(vectors, MakeRuntimeTestVector("Deposit", tx, txBody, meta, t.valid, testing.Alice, nonce, sigCtx))
+						vectors = append(vectors, MakeRuntimeTestVector(tx, txBody, meta, t.valid, testing.Alice, nonce, sigCtx))
 					}
 
 					// consensusaccounts.Withdraw
@@ -135,7 +137,7 @@ func main() {
 							"runtime_id":    t.rtId,
 							"chain_context": t.chainContext,
 						}
-						vectors = append(vectors, MakeRuntimeTestVector("Withdraw", tx, txBody, meta, t.valid, t.signer, nonce, sigCtx))
+						vectors = append(vectors, MakeRuntimeTestVector(tx, txBody, meta, t.valid, t.signer, nonce, sigCtx))
 					}
 
 					// accounts.Transfer
@@ -181,7 +183,111 @@ func main() {
 						if t.origTo != "" {
 							meta["orig_to"] = t.origTo
 						}
-						vectors = append(vectors, MakeRuntimeTestVector("Transfer", tx, txBody, meta, t.valid, t.signer, nonce, sigCtx))
+						vectors = append(vectors, MakeRuntimeTestVector(tx, txBody, meta, t.valid, t.signer, nonce, sigCtx))
+					}
+				}
+
+				for _, t := range []struct {
+					signer       testing.TestKey
+					rtId         string
+					chainContext string
+					valid        bool
+				}{
+					{testing.Alice, rtIdHex, string(chainContext), true},
+					{testing.Dave, rtIdHex, string(chainContext), true},
+					{testing.Alice, unknownRtIdHex, string(chainContext), false},
+					{testing.Alice, rtIdHex, unknownChainContext, false},
+				} {
+					for _, tokens := range [][]types.BaseUnits{
+						{
+							types.BaseUnits{
+								Amount:       *quantity.NewFromUint64(1_000_000_000),
+								Denomination: "ROSE",
+							},
+							types.BaseUnits{
+								Amount:       *quantity.NewFromUint64(2_000),
+								Denomination: "WBTC",
+							},
+							types.BaseUnits{
+								Amount:       *quantity.NewFromUint64(3_000_000),
+								Denomination: "WETH",
+							},
+						},
+						{
+							types.BaseUnits{
+								Amount:       *quantity.NewFromUint64(1_000_000_000_000),
+								Denomination: "ROSE",
+							},
+						},
+						{
+							types.BaseUnits{
+								Amount:       *quantity.NewFromUint64(0),
+								Denomination: "TEST",
+							},
+						},
+						{},
+					} {
+						for _, id := range []uint64{0, 1, math.MaxUint64} {
+							// contracts.Call
+							txBodyCall := &contracts.Call{
+								ID:     contracts.InstanceID(id),
+								Data:   nil, // TODO
+								Tokens: tokens,
+							}
+							tx = contracts.NewCallTx(fee, txBodyCall)
+							meta = map[string]string{
+								"runtime_id":    t.rtId,
+								"chain_context": t.chainContext,
+							}
+							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
+
+							// contracts.Instantiate
+							txBodyInstantiate := &contracts.Instantiate{
+								CodeID:         contracts.CodeID(id),
+								UpgradesPolicy: contracts.Policy{}, // TODO
+								Data:           nil,                // TODO
+								Tokens:         tokens,
+							}
+							tx = contracts.NewInstantiateTx(fee, txBodyInstantiate)
+							meta = map[string]string{
+								"runtime_id":    t.rtId,
+								"chain_context": t.chainContext,
+							}
+							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyInstantiate, meta, t.valid, t.signer, nonce, sigCtx))
+
+							// contracts.Upgrade
+							txBodyUpgrade := &contracts.Upgrade{
+								ID:     contracts.InstanceID(id),
+								CodeID: contracts.CodeID(0 ^ id),
+								Data:   nil, // TODO
+								Tokens: tokens,
+							}
+							tx = contracts.NewUpgradeTx(fee, txBodyUpgrade)
+							meta = map[string]string{
+								"runtime_id":    t.rtId,
+								"chain_context": t.chainContext,
+							}
+							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyUpgrade, meta, t.valid, t.signer, nonce, sigCtx))
+
+							// contracts.Upload not supported by Ledger due to tx bytecode size.
+						}
+					}
+
+					{
+						// evm.Call
+						txBodyCall := &evm.Call{
+							Address: nil, // TODO
+							Value:   nil, // TODO
+							Data:    nil, // TODO
+						}
+						tx = evm.NewCallTx(fee, txBodyCall)
+						meta = map[string]string{
+							"runtime_id":    t.rtId,
+							"chain_context": t.chainContext,
+						}
+						vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
+
+						// evm.Create not supported by Ledger due to tx bytecode size.
 					}
 				}
 			}
