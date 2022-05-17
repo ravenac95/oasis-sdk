@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/oasisprotocol/oasis-core/go/common"
+	"github.com/oasisprotocol/oasis-core/go/common/cbor"
 	"github.com/oasisprotocol/oasis-core/go/common/quantity"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/config"
 	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/crypto/signature"
@@ -228,6 +229,43 @@ func main() {
 						{},
 					} {
 						for _, id := range []uint64{0, 1, math.MaxUint64} {
+							// contracts.Upload not supported by Ledger due to tx bytecode size.
+
+							for _, d := range []map[string]interface{}{
+								// Valid data, empty
+								{},
+								// Valid data, one function call with argument.
+								{
+									"say_hello": map[string]interface{}{
+										"who": "me",
+									},
+								},
+								// Valid data, one function call with argument.
+								{
+									"instantiate": map[string]interface{}{
+										"initial_counter": 42,
+									},
+								},
+								// Valid data, custom ABI.
+								{
+									"test123": "test1234",
+								},
+							} {
+								// contracts.Instantiate
+								txBodyInstantiate := &contracts.Instantiate{
+									CodeID:         contracts.CodeID(id),
+									UpgradesPolicy: contracts.Policy{}, // TODO
+									Data:           cbor.Marshal(d),
+									Tokens:         tokens,
+								}
+								tx = contracts.NewInstantiateTx(fee, txBodyInstantiate)
+								meta = map[string]string{
+									"runtime_id":    t.rtId,
+									"chain_context": t.chainContext,
+								}
+								vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyInstantiate, meta, t.valid, t.signer, nonce, sigCtx))
+							}
+
 							// contracts.Call
 							txBodyCall := &contracts.Call{
 								ID:     contracts.InstanceID(id),
@@ -240,20 +278,6 @@ func main() {
 								"chain_context": t.chainContext,
 							}
 							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
-
-							// contracts.Instantiate
-							txBodyInstantiate := &contracts.Instantiate{
-								CodeID:         contracts.CodeID(id),
-								UpgradesPolicy: contracts.Policy{}, // TODO
-								Data:           nil,                // TODO
-								Tokens:         tokens,
-							}
-							tx = contracts.NewInstantiateTx(fee, txBodyInstantiate)
-							meta = map[string]string{
-								"runtime_id":    t.rtId,
-								"chain_context": t.chainContext,
-							}
-							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyInstantiate, meta, t.valid, t.signer, nonce, sigCtx))
 
 							// contracts.Upgrade
 							txBodyUpgrade := &contracts.Upgrade{
@@ -268,8 +292,6 @@ func main() {
 								"chain_context": t.chainContext,
 							}
 							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyUpgrade, meta, t.valid, t.signer, nonce, sigCtx))
-
-							// contracts.Upload not supported by Ledger due to tx bytecode size.
 						}
 					}
 
