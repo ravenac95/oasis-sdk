@@ -242,6 +242,28 @@ func NewTransaction(fee *Fee, method string, body interface{}) *Transaction {
 	return tx
 }
 
+// NewEncryptedTransaction creates a new unsigned transaction.
+func NewEncryptedTransaction(fee *Fee, body interface{}) *Transaction {
+	tx := &Transaction{
+		Versioned: cbor.NewVersioned(LatestTransactionVersion),
+		Call: Call{
+			Format: CallFormatEncryptedX25519DeoxysII,
+			Method: "",
+			Body:   cbor.Marshal(body),
+		},
+	}
+	if fee != nil {
+		tx.AuthInfo.Fee = *fee
+	} else {
+		// Set up a default amount to avoid invalid serialization.
+		tx.AuthInfo.Fee.Amount = NewBaseUnits(*quantity.NewFromUint64(0), NativeDenomination)
+	}
+	// Initialize SignerInfo to avoid it being set to null in case there are no signers specified
+	// which is valid in some queries.
+	tx.AuthInfo.SignerInfo = []SignerInfo{}
+	return tx
+}
+
 // CallFormat is the format used for encoding the call (and output) information.
 type CallFormat uint8
 

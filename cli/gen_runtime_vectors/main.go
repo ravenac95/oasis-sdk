@@ -199,6 +199,11 @@ func main() {
 					{testing.Alice, unknownRtIdHex, string(chainContext), false},
 					{testing.Alice, rtIdHex, unknownChainContext, false},
 				} {
+					meta = map[string]string{
+						"runtime_id":    t.rtId,
+						"chain_context": t.chainContext,
+					}
+
 					for _, tokens := range [][]types.BaseUnits{
 						{
 							types.BaseUnits{
@@ -251,51 +256,60 @@ func main() {
 									"test123": "test1234",
 								},
 							} {
-								// contracts.Instantiate
-								txBodyInstantiate := &contracts.Instantiate{
-									CodeID:         contracts.CodeID(id),
-									UpgradesPolicy: contracts.Policy{}, // TODO
-									Data:           cbor.Marshal(d),
-									Tokens:         tokens,
+								addr, _ := helpers.ResolveAddress(nil, daveNativeAddr)
+								for _, p := range []contracts.Policy{
+									// Valid policy, everyone can instantiate/upgrade it.
+									{Everyone: &struct{}{}},
+									// Valid policy, noone can instantiate/upgrade it.
+									{Nobody: &struct{}{}},
+									// Valid policy, arbitrary address can instantiate/upgrade it.
+									{Address: addr},
+								} {
+									// contracts.Instantiate
+									txBodyInstantiate := &contracts.Instantiate{
+										CodeID:         contracts.CodeID(id),
+										UpgradesPolicy: p,
+										Data:           cbor.Marshal(d),
+										Tokens:         tokens,
+									}
+									tx = contracts.NewInstantiateTx(fee, txBodyInstantiate)
+									vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyInstantiate, meta, t.valid, t.signer, nonce, sigCtx))
 								}
-								tx = contracts.NewInstantiateTx(fee, txBodyInstantiate)
-								meta = map[string]string{
-									"runtime_id":    t.rtId,
-									"chain_context": t.chainContext,
+
+								// contracts.Call
+								txBodyCall := &contracts.Call{
+									ID:     contracts.InstanceID(id),
+									Data:   cbor.Marshal(d),
+									Tokens: tokens,
 								}
-								vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyInstantiate, meta, t.valid, t.signer, nonce, sigCtx))
-							}
+								tx = contracts.NewCallTx(fee, txBodyCall)
+								vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
 
-							// contracts.Call
-							txBodyCall := &contracts.Call{
-								ID:     contracts.InstanceID(id),
-								Data:   nil, // TODO
-								Tokens: tokens,
+								// contracts.Upgrade
+								txBodyUpgrade := &contracts.Upgrade{
+									ID:     contracts.InstanceID(id),
+									CodeID: contracts.CodeID(0 ^ id),
+									Data:   cbor.Marshal(d),
+									Tokens: tokens,
+								}
+								tx = contracts.NewUpgradeTx(fee, txBodyUpgrade)
+								vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyUpgrade, meta, t.valid, t.signer, nonce, sigCtx))
 							}
-							tx = contracts.NewCallTx(fee, txBodyCall)
-							meta = map[string]string{
-								"runtime_id":    t.rtId,
-								"chain_context": t.chainContext,
-							}
-							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
-
-							// contracts.Upgrade
-							txBodyUpgrade := &contracts.Upgrade{
-								ID:     contracts.InstanceID(id),
-								CodeID: contracts.CodeID(0 ^ id),
-								Data:   nil, // TODO
-								Tokens: tokens,
-							}
-							tx = contracts.NewUpgradeTx(fee, txBodyUpgrade)
-							meta = map[string]string{
-								"runtime_id":    t.rtId,
-								"chain_context": t.chainContext,
-							}
-							vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyUpgrade, meta, t.valid, t.signer, nonce, sigCtx))
 						}
 					}
 
+					// Encrypted transaction.
+					body := &types.CallEnvelopeX25519DeoxysII{
+						Pk:    [32]byte{'p', 'u', 'b', 'l', 'i', 'c', 'k', 'e', 'y'},
+						Nonce: [15]byte{'e', 'n', 'c', 'r', 'y', 'p', 't', 'i', 'o', 'n', 'n', 'o', 'n', 'c', 'e'},
+						Data:  []byte("encrypted Call.Body object goes here"),
+					}
+					tx = types.NewEncryptedTransaction(fee, body)
+					vectors = append(vectors, MakeRuntimeTestVector(tx, body, meta, t.valid, t.signer, nonce, sigCtx))
+
 					{
+						// evm.Create not supported by Ledger due to tx bytecode size.
+
 						// evm.Call
 						txBodyCall := &evm.Call{
 							Address: nil, // TODO
@@ -303,13 +317,7 @@ func main() {
 							Data:    nil, // TODO
 						}
 						tx = evm.NewCallTx(fee, txBodyCall)
-						meta = map[string]string{
-							"runtime_id":    t.rtId,
-							"chain_context": t.chainContext,
-						}
 						vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
-
-						// evm.Create not supported by Ledger due to tx bytecode size.
 					}
 				}
 			}
