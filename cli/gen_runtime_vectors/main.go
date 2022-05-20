@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -35,6 +36,15 @@ const (
 
 	// Invalid chain context.
 	unknownChainContext = "abcdef01234567890ea817cc1446c401752a05a249b36c9b9876543210fedcba"
+)
+
+var (
+	// wRoseAddr is the wROSE smart contract deployment on the Mainnet.
+	wRoseAddr, _ = hex.DecodeString("21C718C22D52d0F3a789b752D4c2fD5908a8A733")
+	// wRoseNameMethod is the address of Name() method.
+	wRoseNameMethod, _ = hex.DecodeString("06fdde03" + strings.Repeat("0", 64-8))
+	// zero is the evm-encoded value for 0 ROSE.
+	zero, _ = hex.DecodeString(strings.Repeat("0", 64))
 )
 
 func main() {
@@ -298,27 +308,29 @@ func main() {
 						}
 					}
 
-					// Encrypted transaction.
-					body := &types.CallEnvelopeX25519DeoxysII{
-						Pk:    [32]byte{'p', 'u', 'b', 'l', 'i', 'c', 'k', 'e', 'y'},
-						Nonce: [15]byte{'e', 'n', 'c', 'r', 'y', 'p', 't', 'i', 'o', 'n', 'n', 'o', 'n', 'c', 'e'},
-						Data:  []byte("encrypted Call.Body object goes here"),
+					// Encrypted transaction, body is types.CallFormatEncryptedX25519DeoxysII.
+					body := &struct {
+						Pk    []byte
+						Nonce []byte
+						Data  []byte
+					}{
+						[]byte{'p', 'u', 'b', 'l', 'i', 'c', 'k', 'e', 'y'},
+						[]byte{'e', 'n', 'c', 'r', 'y', 'p', 't', 'i', 'o', 'n', 'n', 'o', 'n', 'c', 'e'},
+						[]byte("encrypted Call.Body object goes here"),
 					}
 					tx = types.NewEncryptedTransaction(fee, body)
 					vectors = append(vectors, MakeRuntimeTestVector(tx, body, meta, t.valid, t.signer, nonce, sigCtx))
 
-					{
-						// evm.Create not supported by Ledger due to tx bytecode size.
+					// evm.Create not supported by Ledger due to tx bytecode size.
 
-						// evm.Call
-						txBodyCall := &evm.Call{
-							Address: nil, // TODO
-							Value:   nil, // TODO
-							Data:    nil, // TODO
-						}
-						tx = evm.NewCallTx(fee, txBodyCall)
-						vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
+					// evm.Call
+					txBodyCall := &evm.Call{
+						Address: wRoseAddr,
+						Value:   zero,
+						Data:    wRoseNameMethod,
 					}
+					tx = evm.NewCallTx(fee, txBodyCall)
+					vectors = append(vectors, MakeRuntimeTestVector(tx, txBodyCall, meta, t.valid, t.signer, nonce, sigCtx))
 				}
 			}
 		}
@@ -327,7 +339,7 @@ func main() {
 	// Generate output.
 	jsonOut, err := json.MarshalIndent(&vectors, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error encoding test vectors: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error encoding test vectors: %v\n", err)
 	}
 	fmt.Printf("%s", jsonOut)
 }
