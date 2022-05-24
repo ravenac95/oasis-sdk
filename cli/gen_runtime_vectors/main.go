@@ -251,14 +251,27 @@ func main() {
 								{},
 								// Valid data, one function call with argument.
 								{
-									"say_hello": map[string]interface{}{
-										"who": "me",
+									"call": map[string]interface{}{
+										"say_hello": map[string]interface{}{
+											"who": "me",
+										},
 									},
 								},
 								// Valid data, one function call with argument.
 								{
 									"instantiate": map[string]interface{}{
-										"initial_counter": 42,
+										"instantiate": map[string]interface{}{
+											"initial_counter": 42,
+										},
+									},
+								},
+								// Valid data, multiple function calls.
+								{
+									"pre_upgrade": map[string]interface{}{
+										"clean_records": map[string]interface{}{},
+									},
+									"post_upgrade": map[string]interface{}{
+										"migrate_records": map[string]interface{}{},
 									},
 								},
 								// Valid data, custom ABI.
