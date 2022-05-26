@@ -510,13 +510,15 @@ impl<Cfg: Config> Module<Cfg> {
         ) -> (evm::ExitReason, Vec<u8>),
         C: TxContext,
     {
-        let cfg = if estimate_gas {
+        let cfg = if false {
             &*EVM_CONFIG_ESTIMATE
         } else {
             &EVM_CONFIG
         };
+        println!("is estimate: {:?}", estimate_gas);
 
         let gas_limit: u64 = <C::Runtime as Runtime>::Core::remaining_tx_gas(ctx);
+        println!("gas_limit: {:?}", gas_limit);
         let gas_price: primitive_types::U256 = ctx.tx_auth_info().fee.gas_price().into();
         let fee_denomination = ctx.tx_auth_info().fee.amount.denomination().clone();
 
@@ -565,6 +567,8 @@ impl<Cfg: Config> Module<Cfg> {
             <C::Runtime as Runtime>::Core::use_tx_gas(ctx, gas_used)?;
             return Err(err);
         };
+
+        println!("gas_used {:?}", gas_used);
 
         <C::Runtime as Runtime>::Core::use_tx_gas(ctx, gas_used)?;
 

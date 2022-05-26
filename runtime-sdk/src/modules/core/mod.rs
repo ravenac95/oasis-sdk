@@ -356,6 +356,7 @@ impl<Cfg: Config> Module<Cfg> {
     ) -> Result<u64, Error> {
         // Assume maximum amount of gas in a batch, a reasonable maximum fee and maximum amount of consensus messages.
         args.tx.auth_info.fee.gas = Self::params(ctx.runtime_state()).max_batch_gas;
+        println!("Estimate gas limit: {:?}", args.tx.auth_info.fee.gas);
         args.tx.auth_info.fee.amount =
             token::BaseUnits::new(u64::MAX.into(), token::Denomination::NATIVE);
         args.tx.auth_info.fee.consensus_messages = ctx.remaining_messages();
