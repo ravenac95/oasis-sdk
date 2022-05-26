@@ -193,3 +193,147 @@ fn create_abi<Cfg: Config, C: Context>(abi: types::ABI) -> Result<Box<dyn Abi<C>
         types::ABI::OasisV1 => Ok(Box::new(OasisV1::<Cfg>::new())),
     }
 }
+
+#[cfg(test)]
+mod test {
+    extern crate test;
+    use test::Bencher;
+
+    const BENCH_CODE: &[u8] = include_bytes!("../../../../tests/contracts/bench/target/wasm32-unknown-unknown/release/bench.wasm");
+    const OPCODE_SPINS: i32 = 1_000_000;
+
+    fn bench_wat_spinner<F>(b: &mut Bencher, param: i32, code: &str, mut linkup: F)
+    where
+        F: FnMut(&mut wasm3::Instance<'_, '_, wasm3::CallContext<'_, ()>>),
+    {
+        let module_bin = wat::parse_str(code).expect("parsing module wat should succeed");
+        let env = wasm3::Environment::new().expect("creating a new wasm3 environment should succeed");
+        let module = env.parse_module(&module_bin).expect("parsing the code should succeed");
+        let rt: wasm3::Runtime<'_, wasm3::CallContext<'_, ()>> = env.new_runtime(1 * 1024 * 1024, None).expect("creating a new wasm3 runtime should succeed");
+        //let rt = env.new_runtime(1 * 1024 * 1024, None).expect("creating a new wasm3 runtime should succeed");
+        let mut instance = rt.load_module(module).expect("instance creation should succeed");
+        linkup(&mut instance);
+        let func = instance.find_function::<i32, ()>("spinner").expect("finding the entrypoint function should succeed");
+        b.iter(|| {
+            func.call(param).expect("function call should succeed");
+        });
+    }
+
+    const LOOP_SKEL: &str = r#"
+        (module
+            (func $spinner (param $lim i32)
+                (loop $spin
+                    local.get $lim
+                    i32.const 1
+                    i32.sub
+                    local.tee $lim
+
+                    ;; measure this block by comparing runtimes
+                    ;; with the module in bench_loop_skel, where
+                    ;; this section is empty.
+                    {}
+
+                    i32.const 0
+                    i32.ne
+                    br_if $spin
+                )
+            )
+            (export "spinner" (func $spinner))
+        )
+    "#;
+
+    #[bench]
+    fn bench_loop_skel(b: &mut Bencher) {
+        let src = LOOP_SKEL.replace("{}", "");
+        bench_wat_spinner(b, OPCODE_SPINS, &src, |_| {});
+    }
+
+    #[bench]
+    fn bench_loop_add(b: &mut Bencher) {
+        let src = LOOP_SKEL.replace("{}", r#"
+            i32.const 0
+            i32.add
+        "#);
+        bench_wat_spinner(b, OPCODE_SPINS, &src, |_| {});
+    }
+
+    #[bench]
+    fn bench_loop_mul(b: &mut Bencher) {
+        let src = LOOP_SKEL.replace("{}", r#"
+            i32.const 1
+            i32.mul
+        "#);
+        bench_wat_spinner(b, OPCODE_SPINS, &src, |_| {});
+    }
+
+    #[bench]
+    fn bench_loop_div(b: &mut Bencher) {
+        let src = LOOP_SKEL.replace("{}", r#"
+            i32.const 1
+            i32.div_s
+        "#);
+        bench_wat_spinner(b, OPCODE_SPINS, &src, |_| {});
+    }
+
+    #[bench]
+    fn bench_loop_call(b: &mut Bencher) {
+        let src = r#"
+            (module
+                (func $callee
+                    return
+                )
+                (func $spinner (param $lim i32)
+                    (loop $spin
+                        local.get $lim
+                        i32.const 1
+                        i32.sub
+                        local.tee $lim
+
+                        ;; measure this block by comparing runtimes
+                        ;; with the module in bench_loop_skel, where
+                        ;; this section is empty.
+                        call $callee
+
+                        i32.const 0
+                        i32.ne
+                        br_if $spin
+                    )
+                )
+                (export "spinner" (func $spinner))
+            )
+        "#;
+        bench_wat_spinner(b, OPCODE_SPINS, &src, |_| {});
+    }
+
+    #[bench]
+    fn bench_loop_call_external(b: &mut Bencher) {
+        let src = r#"
+            (module
+                (import "bench" "callee" (func $callee))
+                (func $spinner (param $lim i32)
+                    (loop $spin
+                        local.get $lim
+                        i32.const 1
+                        i32.sub
+                        local.tee $lim
+
+                        ;; measure this block by comparing runtimes
+                        ;; with the module in bench_loop_skel, where
+                        ;; this section is empty.
+                        call $callee
+
+                        i32.const 0
+                        i32.ne
+                        br_if $spin
+                    )
+                )
+                (export "spinner" (func $spinner))
+            )
+        "#;
+        bench_wat_spinner(b, OPCODE_SPINS, &src, |instance| {
+            instance.link_function("bench", "callee", |_, _: ()| -> Result<(), wasm3::Trap> {
+                Ok(())
+            });
+        });
+    }
+}

@@ -145,3 +145,73 @@ fn get_key(
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    extern crate test;
+    use super::*;
+    use test::Bencher;
+
+    use k256::{self, ecdsa::{self, signature::Verifier as _}};
+
+    const BENCH_CODE: &[u8] = include_bytes!("../../../../../../tests/contracts/bench/target/wasm32-unknown-unknown/release/bench.wasm");
+    const MESSAGE: &[u8] = include_bytes!("../../../../../../tests/contracts/bench/data/message.txt");
+    const SIGNATURE: &[u8] = include_bytes!("../../../../../../tests/contracts/bench/data/signature.bin");
+    const KEY: &[u8] = include_bytes!("../../../../../../tests/contracts/bench/data/key.bin");
+
+    fn verify_signature(message: &[u8], signature: &[u8], key: &[u8]) -> Result<(), ()> {
+        let key = k256::EncodedPoint::from_bytes(key).map_err(|_| ())?;
+        let sig = ecdsa::Signature::from_der(signature).map_err(|_| ())?;
+        let verifying_key = ecdsa::VerifyingKey::from_encoded_point(&key).map_err(|_| ())?;
+        verifying_key.verify(message, &sig).map_err(|_| ())?;
+        Ok(())
+    }
+
+    #[bench]
+    fn bench_crypto_nonwasm_plain(b: &mut Bencher) {
+        b.iter(|| {
+            verify_signature(MESSAGE, SIGNATURE, KEY).unwrap();
+        });
+    }
+
+    #[bench]
+    fn bench_crypto_called_from_wasm_included(b: &mut Bencher) {
+        let env = wasm3::Environment::new().expect("creating a new wasm3 environment should succeed");
+        let module = env.parse_module(BENCH_CODE).expect("parsing the code should succeed");
+        let rt: wasm3::Runtime<'_, wasm3::CallContext<'_, ()>> = env.new_runtime(1 * 1024 * 1024, None).expect("creating a new wasm3 runtime should succeed");
+        //let rt = env.new_runtime(1 * 1024 * 1024, None).expect("creating a new wasm3 runtime should succeed");
+        let mut instance = rt.load_module(module).expect("instance creation should succeed");
+        instance.link_function("bench", "verify_signature", |ctx, (message, signature, key): ((u32, u32), (u32, u32), (u32, u32))| -> Result<(), wasm3::Trap> {
+            ctx.instance.runtime().try_with_memory(|memory| -> Result<_, wasm3::Trap> {
+                let message = Region::from_arg(message)
+                    .as_slice(&memory)
+                    .map_err(|_| wasm3::Trap::Abort)?;
+                let signature = Region::from_arg(signature)
+                    .as_slice(&memory)
+                    .map_err(|_| wasm3::Trap::Abort)?;
+                let key = Region::from_arg(key)
+                    .as_slice(&memory)
+                    .map_err(|_| wasm3::Trap::Abort)?;
+                verify_signature(message, signature, key).map_err(|_| wasm3::Trap::Abort)?;
+                Ok(())
+            })?
+        });
+        let func = instance.find_function::<(), ()>("call_verification_included").expect("finding the entrypoint function should succeed");
+        b.iter(|| {
+            func.call(()).expect("function call should succeed");
+        });
+    }
+
+    #[bench]
+    fn bench_crypto_computed_in_wasm(b: &mut Bencher) {
+        let env = wasm3::Environment::new().expect("creating a new wasm3 environment should succeed");
+        let module = env.parse_module(BENCH_CODE).expect("parsing the code should succeed");
+        let rt: wasm3::Runtime<'_, wasm3::CallContext<'_, ()>> = env.new_runtime(1 * 1024 * 1024, None).expect("creating a new wasm3 runtime should succeed");
+        //let rt = env.new_runtime(1 * 1024 * 1024, None).expect("creating a new wasm3 runtime should succeed");
+        let instance = rt.load_module(module).expect("instance creation should succeed");
+        let func = instance.find_function::<(), ()>("call_verification_internal").expect("finding the entrypoint function should succeed");
+        b.iter(|| {
+            func.call(()).expect("function call should succeed");
+        });
+    }
+}

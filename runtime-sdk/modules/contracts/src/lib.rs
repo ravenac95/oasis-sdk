@@ -1,6 +1,7 @@
 //! Smart contracts module.
 #![deny(rust_2018_idioms)]
 #![forbid(unsafe_code)]
+#![feature(test)]
 
 #[cfg(test)]
 extern crate alloc;
