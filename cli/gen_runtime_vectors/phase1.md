@@ -1,7 +1,7 @@
 # 1st Phase Proposal
 
 This document proposes Phase 1 Oasis Ledger App features for the ParaTime transactions.
-Complete design document is available [here](ledger-paratime-transactions-ui.md).
+Complete design document is available [here](ledger-paratime-transactions.md).
 
 ## APDUSPEC changes
 
