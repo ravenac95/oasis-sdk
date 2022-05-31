@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["ConfidentialMap","A map backed by contract storage."],["Int","An integer in big-endian representation."],["PublicMap","A map backed by contract storage."]],"trait":[["Integer","A trait representing an integer that can be encoded into big-endian bytes."],["MapKey","A trait for types which can be used as map keys."]]});
