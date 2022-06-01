@@ -3,7 +3,9 @@ package connection
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -104,8 +106,24 @@ func ConnectNoVerify(ctx context.Context, net *config.Network) (Connection, erro
 		// No TLS needed for local nodes.
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	case false:
+		tc := &tls.Config{MinVersion: tls.VersionTLS12}
+		if net.TLSCertFile != "" {
+			rootCAs, _ := x509.SystemCertPool()
+			if rootCAs == nil {
+				rootCAs = x509.NewCertPool()
+			}
+			certs, err := ioutil.ReadFile(net.TLSCertFile)
+			if err != nil {
+				return nil, err
+			}
+			// Append our cert to the system pool
+			if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+				return nil, fmt.Errorf("no cert found at %s", net.TLSCertFile)
+			}
+			tc.RootCAs = rootCAs
+		}
 		// Configure TLS for non-local nodes.
-		creds := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
+		creds := credentials.NewTLS(tc)
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 	}
 

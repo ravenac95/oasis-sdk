@@ -106,6 +106,8 @@ type Network struct {
 	ChainContext string `mapstructure:"chain_context"`
 	RPC          string `mapstructure:"rpc"`
 
+	TLSCertFile string `mapstructure:"tls_cert_file"`
+
 	Denomination DenominationInfo `mapstructure:"denomination"`
 
 	ParaTimes ParaTimes `mapstructure:"paratimes"`
