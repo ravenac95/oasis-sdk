@@ -113,6 +113,8 @@ func ConnectNoVerify(ctx context.Context, net *config.Network) (Connection, erro
 			rootCAs = x509.NewCertPool()
 		}
 
+		fmt.Printf("rootCAs: %+v\n", rootCAs)
+
 		if net.TLSCertFile != "" {
 			certs, err := ioutil.ReadFile(net.TLSCertFile)
 			if err != nil {
