@@ -107,11 +107,13 @@ func ConnectNoVerify(ctx context.Context, net *config.Network) (Connection, erro
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	case false:
 		tc := &tls.Config{MinVersion: tls.VersionTLS12}
+
+		rootCAs, _ := x509.SystemCertPool()
+		if rootCAs == nil {
+			rootCAs = x509.NewCertPool()
+		}
+
 		if net.TLSCertFile != "" {
-			rootCAs, _ := x509.SystemCertPool()
-			if rootCAs == nil {
-				rootCAs = x509.NewCertPool()
-			}
 			certs, err := ioutil.ReadFile(net.TLSCertFile)
 			if err != nil {
 				return nil, err
@@ -120,8 +122,9 @@ func ConnectNoVerify(ctx context.Context, net *config.Network) (Connection, erro
 			if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
 				return nil, fmt.Errorf("no cert found at %s", net.TLSCertFile)
 			}
-			tc.RootCAs = rootCAs
 		}
+		tc.RootCAs = rootCAs
+
 		// Configure TLS for non-local nodes.
 		creds := credentials.NewTLS(tc)
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
